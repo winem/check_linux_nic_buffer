@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+import argparse
+import sys
+
+from subprocess import run, PIPE
+
+def main(args):
+    chk_msg             = {}
+    chk_msg_prefix      = 'NIC BUFFER'
+    chk_state           = 0
+    chk_state_strings   = [ 'OK', 'WARNING', 'CRITICAL', 'UNKNOWN' ]
+    metrics             = {}
+    sh_command          = 'ethtool -S {}'.format(args.interface)
+
+    try:
+        buffer_metrics  = run(sh_command.split(), stdout=PIPE)
+
+    except Exception as e:
+        print('{} UNKNOWN - failed to execute ethtool utility ({}).'.format(chk_msg_prefix, sh_command))
+        sys.exit(3)
+
+    else:
+        metric            = args.metric
+        metric_id_string  = metric.replace('_', ' ')
+        metrics[metric]   = 0
+        metric_matches    = 0
+        for m in buffer_metrics.stdout.decode('utf-8').split('\n'):
+            if len(m) > 0:
+                k, v = m.strip().split(':')
+                if k == metric_id_string:
+                    metric_matches     += 1
+                    metrics[metric]     = int(v.strip())
+                    chk_msg[metric]     = '{} is {!s}'.format(metric, metrics[metric])
+
+    if metric_matches == 0:
+        chk_state       = 3 
+        chk_msg[metric] = 'No metric matched {}.'.format(metric_id_string)
+
+        print('{} {} - {}'.format(chk_msg_prefix, chk_state_strings[chk_state], chk_msg[metric]))
+        sys.exit(chk_state)
+
+    if args.ring_full_warn or args.ring_full_warn == 0 or args.ring_full_crit or args.ring_full_crit == 0:
+        metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.ring_full_warn, args.ring_full_crit)
+
+    if args.pkts_rx_oob_warn or args.pkts_rx_oob_warn == 0 or args.pkts_rx_oob_crit or args.pkts_rx_oob_crit == 0:
+        metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.pkts_rx_oob_warn, args.pkts_rx_oob_crit)
+
+    perf_data       = (' '.join("{!s}={!s}".format(k,v) for (k,v) in metrics.items()))
+    chk_msg_string  = ('; '.join("{!s}".format(v) for (k, v) in chk_msg.items()))
+
+    composed_output = ' '.join((chk_msg_prefix, chk_state_strings[chk_state], '-', chk_msg_string, '|', perf_data))
+
+    print(composed_output)
+    sys.exit(chk_state)
+
+
+def checkMetricsAgainstThresholds(m, m_name, c_state, c_msg,  m_warn=None, m_crit=None):
+    if (m_crit or m_crit == 0) and int(m[m_name]) > int(m_crit):
+        c_state         = 2
+        c_msg[m_name]   = '{} is > {} ({})'.format(m_name, int(m_crit), m[m_name])
+
+    elif (m_warn or m_warn == 0) and int(m[m_name]) > int(m_warn):
+        if c_state != 2:
+            c_state     = 1
+        
+        c_msg[m_name]   = '{} is > {} ({})'.format(m_name, int(m_warn), m[m_name])
+
+    else:
+        if c_state not in (1, 2):
+            c_state = 0
+        
+        c_msg[m_name]   = '{} is {}'.format(m_name, m[m_name])
+
+    pd_value        = m[m_name]
+
+    pd_warn         = m_warn if m_warn else ''
+    pd_crit         = m_crit if m_crit else ''
+    
+    m[m_name]       = '{};{};{}'.format(pd_value, pd_warn, pd_crit).strip(';')
+
+    return m, c_msg, c_state
+
+
+def parseArgs():
+    argParser = argparse.ArgumentParser(description='Providing TCP socket statistics from /proc/net/sockstat')
+    argParser.add_argument('-i', '--interface', dest='interface', type=str, required=True, default=False, \
+                            help='Interface name of the monitored nic.')
+    argParser.add_argument('-m', '--metric', dest='metric', type=str, required=True, choices=['pkts_rx_OOB', 'ring_full'], default=False, \
+                            help='Reported metric. Choices: pkts_rx_OOB, ring_full')
+    argParser.add_argument('--ring-full-warn', dest='ring_full_warn', type=int, default=False, \
+                            help='Warning threshold for ring full (TX).')
+    argParser.add_argument('--ring-full-crit', dest='ring_full_crit', type=int, default=False, \
+                            help='Critical threshold for ring full (TX).')
+    argParser.add_argument('--pkts-rx-oob-warn', dest='pkts_rx_oob_warn', type=int, default=False, \
+                            help='Warning threshold for pkts rx OOB.')
+    argParser.add_argument('--pkts-rx-oob-crit', dest='pkts_rx_oob_crit', type=int, default=False, \
+                            help='Critical threshold for pkts rx OOB.')
+
+    return argParser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parseArgs()
+    main(args)
