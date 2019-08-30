@@ -40,12 +40,12 @@ def main(args):
         sys.exit(chk_state)
 
     if metric == 'ring_full':
-        if args.ring_full_warn or args.ring_full_crit:
-            metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.ring_full_warn, args.ring_full_crit)
+        if args.warn or args.crit:
+            metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.warn, args.crit)
 
     if metric == 'pkts_rx_OOB':
-        if args.pkts_rx_oob_warn or args.pkts_rx_oob_crit:
-            metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.pkts_rx_oob_warn, args.pkts_rx_oob_crit)
+        if args.warn or args.crit:
+            metrics, chk_msg, chk_state = checkMetricsAgainstThresholds(metrics, metric, chk_state, chk_msg, args.warn, args.crit)
 
     perf_data       = (' '.join("{!s}={!s}".format(k,v) for (k,v) in metrics.items()))
     chk_msg_string  = ('; '.join("{!s}".format(v) for (k, v) in chk_msg.items()))
@@ -89,14 +89,10 @@ def parseArgs():
                             help='Interface name of the monitored nic.')
     argParser.add_argument('-m', '--metric', dest='metric', type=str, required=True, choices=['pkts_rx_OOB', 'ring_full'], default=False, \
                             help='Reported metric. Choices: pkts_rx_OOB, ring_full')
-    argParser.add_argument('--ring-full-warn', dest='ring_full_warn', type=int, default=False, \
-                            help='Warning threshold for ring full (TX).')
-    argParser.add_argument('--ring-full-crit', dest='ring_full_crit', type=int, default=False, \
-                            help='Critical threshold for ring full (TX).')
-    argParser.add_argument('--pkts-rx-oob-warn', dest='pkts_rx_oob_warn', type=int, default=False, \
-                            help='Warning threshold for pkts rx OOB.')
-    argParser.add_argument('--pkts-rx-oob-crit', dest='pkts_rx_oob_crit', type=int, default=False, \
-                            help='Critical threshold for pkts rx OOB.')
+    argParser.add_argument('-w', '--warn', dest='ring_full_warn', type=int, default=False, \
+                            help='Warning threshol.')
+    argParser.add_argument('-crit', '--crit', dest='ring_full_crit', type=int, default=False, \
+                            help='Critical threshold.')
 
     return argParser.parse_args()
 
